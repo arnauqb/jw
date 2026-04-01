@@ -1,6 +1,6 @@
 #!/bin/bash
 # jw - Julia Warm: fast Julia test runner and formatter via tmux
-# Keeps warm Julia sessions to avoid repeated precompilation (~1s vs ~26s)
+# Keeps warm Julia sessions to avoid repeated precompilation
 #
 # Usage:
 #   jw start <path>              Start a Julia REPL tab for a package

@@ -1,6 +1,6 @@
 # jw — Julia Warm
 
-Fast Julia test runner and formatter using warm tmux sessions. First run pays the precompilation cost, subsequent runs are near-instant (~1s vs ~26s).
+Fast Julia test runner and formatter using warm tmux sessions. First run pays the precompilation cost, subsequent runs are near-instant (warm sessions avoid repeated precompilation).
 
 Designed for use by LLM coding agents (Claude Code, Cursor, Copilot, etc.) that need to run Julia tests programmatically. VS Code's TestItemRunner integration requires GUI interaction that agents can't access — `jw` provides the same warm-session speed through a CLI that any tool can call.
 
