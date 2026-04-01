@@ -1,0 +1,251 @@
+#!/bin/bash
+# jw - Julia Warm: fast Julia test runner and formatter via tmux
+# Keeps warm Julia sessions to avoid repeated precompilation (~1s vs ~26s)
+#
+# Usage:
+#   jw start <path>              Start a Julia REPL tab for a package
+#   jw run <path> [filter]       Run tests (optionally filtered by filename substring)
+#   jw output <path|name>        Capture test output from the tab
+#   jw kill <path|name>          Kill a tab
+#   jw format [path]             Format Julia code (defaults to current directory)
+#   jw list                      List active tabs
+
+READY_SENTINEL="__JW_READY__"
+DONE_SENTINEL="__JW_DONE__"
+
+# Session name scoped to the git repo (or hostname if not in a repo)
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -n "$repo_root" ]; then
+    SESSION="jw-$(basename "$repo_root")"
+else
+    SESSION="jw-$(hostname -s)"
+fi
+
+ensure_session() {
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        tmux new-session -d -s "$SESSION" -n _placeholder
+    fi
+}
+
+# Resolve a path argument to an absolute package directory
+resolve_pkg_dir() {
+    local input="$1"
+    if [ -d "$input" ]; then
+        (cd "$input" && pwd)
+    elif [ -d "packages/$input" ]; then
+        (cd "packages/$input" && pwd)
+    else
+        echo ""
+    fi
+}
+
+# Derive a tmux window name from a package directory
+win_name() {
+    local dir="$1"
+    local name
+    name=$(basename "$dir")
+    # Strip .jl suffix (tmux treats . as pane separator)
+    echo "${name%.jl}"
+}
+
+start_tab() {
+    local dir="$1"
+    local win=$(win_name "$dir")
+    if [ ! -f "$dir/Project.toml" ]; then echo "No Project.toml in: $dir"; return 1; fi
+
+    ensure_session
+
+    if tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$win"; then
+        return 0
+    fi
+
+    tmux new-window -t "$SESSION" -n "$win" -c "$dir"
+    tmux send-keys -t "$SESSION:$win" \
+        "julia --project=@. -e 'using Revise; using TestEnv; TestEnv.activate(); using TestItemRunner; println(\"$READY_SENTINEL\")' -i" Enter
+
+    echo "Starting Julia for $win... waiting for REPL."
+    for i in $(seq 1 90); do
+        output=$(tmux capture-pane -t "$SESSION:$win" -p 2>/dev/null)
+        if echo "$output" | grep -q "^${READY_SENTINEL}$"; then
+            echo "Ready! (${i}s)"
+            tmux kill-window -t "$SESSION:_placeholder" 2>/dev/null
+            return 0
+        fi
+        if echo "$output" | grep -q "^ERROR:"; then
+            echo "Julia failed to start:"
+            echo "$output" | grep -A2 "ERROR:"
+            tmux kill-window -t "$SESSION:$win" 2>/dev/null
+            return 1
+        fi
+        sleep 1
+    done
+    echo "Timed out waiting for Julia to start."
+    return 1
+}
+
+start_formatter() {
+    ensure_session
+    local win="formatter"
+    if tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$win"; then
+        return 0
+    fi
+
+    tmux new-window -t "$SESSION" -n "$win"
+    tmux send-keys -t "$SESSION:$win" \
+        "julia -e 'using JuliaFormatter; println(\"$READY_SENTINEL\")' -i" Enter
+
+    echo "Starting Julia with JuliaFormatter... waiting for REPL."
+    for i in $(seq 1 120); do
+        output=$(tmux capture-pane -t "$SESSION:$win" -p 2>/dev/null)
+        if echo "$output" | grep -q "^${READY_SENTINEL}$"; then
+            echo "Ready! (${i}s)"
+            tmux kill-window -t "$SESSION:_placeholder" 2>/dev/null
+            return 0
+        fi
+        if echo "$output" | grep -q "^ERROR:"; then
+            echo "Julia failed to start:"
+            echo "$output" | grep -A2 "ERROR:"
+            tmux kill-window -t "$SESSION:$win" 2>/dev/null
+            return 1
+        fi
+        sleep 1
+    done
+    echo "Timed out waiting for Julia to start."
+    return 1
+}
+
+case "${1:-help}" in
+    start)
+        input="$2"
+        if [ -z "$input" ]; then echo "Usage: jw start <path>"; exit 1; fi
+        dir=$(resolve_pkg_dir "$input")
+        if [ -z "$dir" ]; then echo "Directory not found: $input"; exit 1; fi
+        win=$(win_name "$dir")
+        if tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$win"; then
+            echo "Tab '$win' already exists. Use 'jw kill $win' first."
+            exit 1
+        fi
+        start_tab "$dir" || exit 1
+        ;;
+
+    run)
+        input="$2"
+        filter="$3"
+        if [ -z "$input" ]; then echo "Usage: jw run <path> [filter]"; exit 1; fi
+        dir=$(resolve_pkg_dir "$input")
+        if [ -z "$dir" ]; then echo "Directory not found: $input"; exit 1; fi
+        win=$(win_name "$dir")
+
+        if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$win"; then
+            echo "No tab for '$win'. Starting automatically..."
+            start_tab "$dir" || exit 1
+        fi
+
+        if [ -z "$filter" ]; then
+            cmd='include("test/runtests.jl")'
+        else
+            cmd="@run_package_tests filter=ti->contains(ti.filename, \"$filter\")"
+        fi
+
+        tmux send-keys -t "$SESSION:$win" C-l
+        sleep 0.2
+        tmux clear-history -t "$SESSION:$win"
+        tmux send-keys -t "$SESSION:$win" "try; $cmd; catch e; println(e); end; println(\"$DONE_SENTINEL\")" Enter
+        echo "Tests running in $win..."
+
+        for i in $(seq 1 300); do
+            output=$(tmux capture-pane -t "$SESSION:$win" -p -S -5 2>/dev/null)
+            # Match sentinel only at line start (not in the command echo which has a leading `>`)
+            if echo "$output" | grep -q "^${DONE_SENTINEL}$"; then
+                full=$(tmux capture-pane -t "$SESSION:$win" -p -S - 2>/dev/null)
+                echo "$full" | grep -A1 "Test Summary\|tests passed\|Error\|ERROR"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "Timed out waiting for tests (5min)."
+        exit 1
+        ;;
+
+    output)
+        input="$2"
+        if [ -z "$input" ]; then echo "Usage: jw output <path|name>"; exit 1; fi
+        dir=$(resolve_pkg_dir "$input")
+        if [ -z "$dir" ]; then
+            # Allow passing a window name directly (e.g. "formatter")
+            win="$input"
+        else
+            win=$(win_name "$dir")
+        fi
+        tmux capture-pane -t "$SESSION:$win" -p -S -100
+        ;;
+
+    kill)
+        name="$2"
+        if [ -z "$name" ]; then echo "Usage: jw kill <path|name>"; exit 1; fi
+        # Accept either a path or a window name directly
+        dir=$(resolve_pkg_dir "$name")
+        if [ -n "$dir" ]; then
+            win=$(win_name "$dir")
+        else
+            win="${name%.jl}"
+        fi
+        tmux send-keys -t "$SESSION:$win" C-c
+        sleep 0.5
+        tmux send-keys -t "$SESSION:$win" 'exit()' Enter
+        sleep 0.5
+        tmux kill-window -t "$SESSION:$win" 2>/dev/null
+        echo "Killed $win tab."
+        ;;
+
+    format)
+        target="${2:-.}"
+        target=$(cd "$target" 2>/dev/null && pwd)
+        if [ -z "$target" ]; then echo "Directory not found: $2"; exit 1; fi
+
+        win="formatter"
+        if ! tmux list-windows -t "$SESSION" -F '#{window_name}' 2>/dev/null | grep -qx "$win"; then
+            echo "No formatter tab. Starting automatically..."
+            start_formatter || exit 1
+        fi
+
+        tmux send-keys -t "$SESSION:$win" C-l
+        sleep 0.2
+        tmux clear-history -t "$SESSION:$win"
+        tmux send-keys -t "$SESSION:$win" \
+            "format(\"$target\"); println(\"$DONE_SENTINEL\")" Enter
+        echo "Formatting $target..."
+
+        for i in $(seq 1 300); do
+            output=$(tmux capture-pane -t "$SESSION:$win" -p -S -5 2>/dev/null)
+            if echo "$output" | grep -q "^${DONE_SENTINEL}$"; then
+                echo "Done! (${i}s)"
+                exit 0
+            fi
+            sleep 1
+        done
+        echo "Timed out waiting for formatter (5min)."
+        exit 1
+        ;;
+
+    list)
+        if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+            echo "No jw session running."
+            exit 0
+        fi
+        tmux list-windows -t "$SESSION" -F '#{window_name} (#{pane_current_command})'
+        ;;
+
+    help|*)
+        echo "jw - Julia Warm: fast test runner and formatter via tmux"
+        echo ""
+        echo "  jw start <path>             Start Julia REPL tab (with Revise + TestEnv)"
+        echo "  jw run <path> [filter]      Run tests (filter by filename substring)"
+        echo "  jw output <path|name>       Show recent output"
+        echo "  jw kill <path|name>         Kill a tab"
+        echo "  jw format [path]            Format Julia code (default: current dir)"
+        echo "  jw list                     List active tabs"
+        echo ""
+        echo "  <path> can be a relative/absolute dir or a name under packages/"
+        ;;
+esac
