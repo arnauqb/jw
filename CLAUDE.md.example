@@ -1,0 +1,11 @@
+# Julia testing
+
+- Run tests via `jw` which keeps warm Julia sessions in tmux (one tab per package):
+  - `jw start <path>` — start a Julia REPL tab with Revise + TestEnv
+  - `jw run <path>` — run all tests (~1s warm vs ~26s cold)
+  - `jw run <path> <filter>` — run filtered tests by filename substring
+  - `jw output <path|name>` — capture recent output
+  - `jw kill <path|name>` — kill tab (e.g. when Revise can't recompile)
+  - `jw format [path]` — format Julia code (warm JuliaFormatter session)
+- Always prefer `jw run` over `julia -e 'using Pkg; Pkg.test()'` — it is 20x faster.
+- Revise auto-recompiles code, but changing structs may require restarting: `jw kill <name>` then re-run.

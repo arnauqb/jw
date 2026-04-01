@@ -41,6 +41,16 @@ jw list                     # List active tabs
 
 The formatter works the same way — a dedicated window with `JuliaFormatter` loaded, reused across invocations.
 
+## LLM agent setup
+
+Copy `CLAUDE.md.example` into your project's `CLAUDE.md` (or append to an existing one) so Claude Code knows to use `jw` instead of `Pkg.test()`:
+
+```bash
+cat /path/to/jw/CLAUDE.md.example >> your-project/CLAUDE.md
+```
+
+For other LLM tools, add equivalent instructions to their system prompt or project config.
+
 ## Examples
 
 ```bash
