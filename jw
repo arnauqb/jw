@@ -144,7 +144,7 @@ case "${1:-help}" in
         if [ -z "$filter" ]; then
             cmd='include("test/runtests.jl")'
         else
-            cmd="@run_package_tests filter=ti->contains(ti.filename, \"$filter\")"
+            cmd="@run_package_tests filter=ti->startswith(abspath(ti.filename), pwd()) && contains(ti.filename, \"$filter\")"
         fi
 
         tmux send-keys -t "$SESSION:$win" C-l
@@ -230,6 +230,17 @@ case "${1:-help}" in
         exit 1
         ;;
 
+    attach)
+        target="${2:+jw-$2}"
+        target="${target:-$SESSION}"
+        if ! tmux has-session -t "$target" 2>/dev/null; then
+            echo "No session '$target'. Active jw sessions:"
+            tmux ls 2>/dev/null | grep "^jw-" || echo "  (none)"
+            exit 1
+        fi
+        tmux attach-session -t "$target"
+        ;;
+
     list)
         if ! tmux has-session -t "$SESSION" 2>/dev/null; then
             echo "No jw session running."
@@ -246,6 +257,7 @@ case "${1:-help}" in
         echo "  jw output <path|name>       Show recent output"
         echo "  jw kill <path|name>         Kill a tab"
         echo "  jw format [path]            Format Julia code (default: current dir)"
+        echo "  jw attach [repo]            Attach to the tmux session (infers repo from cwd)"
         echo "  jw list                     List active tabs"
         echo ""
         echo "  <path> can be a relative/absolute dir or a name under packages/"
