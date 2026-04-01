@@ -150,6 +150,8 @@ case "${1:-help}" in
         tmux send-keys -t "$SESSION:$win" C-l
         sleep 0.2
         tmux clear-history -t "$SESSION:$win"
+        tmux send-keys -t "$SESSION:$win" "Revise.revise(); let errs=Revise.errors(); (errs === nothing || isempty(errs)) || println(\"WARNING: Revise errors — restart recommended: \", keys(errs)); end" Enter
+        sleep 0.5
         tmux send-keys -t "$SESSION:$win" "try; $cmd; catch e; println(e); end; println(\"$DONE_SENTINEL\")" Enter
         echo "Tests running in $win..."
 
