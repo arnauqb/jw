@@ -12,6 +12,8 @@
 
 READY_SENTINEL="__JW_READY__"
 DONE_SENTINEL="__JW_DONE__"
+RESULT_PASS="__JW_RESULT__:PASS"
+RESULT_FAIL="__JW_RESULT__:FAIL"
 
 # Session name scoped to the git repo (or hostname if not in a repo)
 repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -152,7 +154,7 @@ case "${1:-help}" in
         tmux clear-history -t "$SESSION:$win"
         tmux send-keys -t "$SESSION:$win" "Revise.revise(); let errs=Revise.errors(); (errs === nothing || isempty(errs)) || println(\"WARNING: Revise errors — restart recommended: \", keys(errs)); end" Enter
         sleep 0.5
-        tmux send-keys -t "$SESSION:$win" "try; $cmd; catch e; println(e); end; println(\"$DONE_SENTINEL\")" Enter
+        tmux send-keys -t "$SESSION:$win" "try; $cmd; println(\"$RESULT_PASS\"); catch e; showerror(stdout, e, catch_backtrace()); println(); println(\"$RESULT_FAIL\"); end; println(\"$DONE_SENTINEL\")" Enter
         echo "Tests running in $win..."
 
         for i in $(seq 1 300); do
@@ -161,7 +163,13 @@ case "${1:-help}" in
             if echo "$output" | grep -q "^${DONE_SENTINEL}$"; then
                 full=$(tmux capture-pane -t "$SESSION:$win" -p -S - 2>/dev/null)
                 echo "$full" | grep -A1 "Test Summary\|tests passed\|Error\|ERROR"
-                exit 0
+                if echo "$full" | grep -q "${RESULT_FAIL}"; then
+                    exit 1
+                elif echo "$full" | grep -q "${RESULT_PASS}"; then
+                    exit 0
+                else
+                    exit 1
+                fi
             fi
             sleep 1
         done
@@ -215,14 +223,23 @@ case "${1:-help}" in
         sleep 0.2
         tmux clear-history -t "$SESSION:$win"
         tmux send-keys -t "$SESSION:$win" \
-            "format(\"$target\"); println(\"$DONE_SENTINEL\")" Enter
+            "try; format(\"$target\"); println(\"$RESULT_PASS\"); catch e; showerror(stdout, e, catch_backtrace()); println(); println(\"$RESULT_FAIL\"); end; println(\"$DONE_SENTINEL\")" Enter
         echo "Formatting $target..."
 
         for i in $(seq 1 300); do
             output=$(tmux capture-pane -t "$SESSION:$win" -p -S -5 2>/dev/null)
             if echo "$output" | grep -q "^${DONE_SENTINEL}$"; then
-                echo "Done! (${i}s)"
-                exit 0
+                full=$(tmux capture-pane -t "$SESSION:$win" -p -S - 2>/dev/null)
+                if echo "$full" | grep -q "${RESULT_FAIL}"; then
+                    echo "Format failed. Run 'jw output formatter' for details."
+                    exit 1
+                elif echo "$full" | grep -q "${RESULT_PASS}"; then
+                    echo "Done! (${i}s)"
+                    exit 0
+                else
+                    echo "Format result unknown. Run 'jw output formatter' for details."
+                    exit 1
+                fi
             fi
             sleep 1
         done

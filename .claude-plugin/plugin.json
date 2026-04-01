@@ -1,0 +1,6 @@
+{
+  "name": "julia-warm",
+  "version": "1.0.0",
+  "description": "Fast Julia test runner and formatter using warm tmux sessions",
+  "keywords": ["julia", "testing", "formatter", "tmux"]
+}
