@@ -41,6 +41,8 @@ jw list                     # List active tabs
 
 The formatter works the same way — a dedicated window with `JuliaFormatter` loaded, reused across invocations.
 
+Before each test run, `jw` calls `Revise.revise()` and checks `Revise.errors()` — if Revise failed to pick up changes (e.g. syntax errors), it prints a warning suggesting a restart.
+
 ## LLM agent setup
 
 Copy `CLAUDE.md.example` into your project's `CLAUDE.md` (or append to an existing one) so Claude Code knows to use `jw` instead of `Pkg.test()`:
