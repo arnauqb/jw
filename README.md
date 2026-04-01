@@ -30,6 +30,7 @@ jw run <path> [filter]      # Run tests (filter by filename substring)
 jw output <path|name>       # Show recent output from a tab
 jw kill <path|name>         # Kill a tab
 jw format [path]            # Format Julia code (default: current dir)
+jw attach [repo]            # Attach to the tmux session (infers repo from cwd)
 jw list                     # List active tabs
 ```
 
@@ -64,6 +65,10 @@ jw run packages/MyPackage.jl parser
 
 # Format the packages directory
 jw format packages/
+
+# Attach to the tmux session to interact with REPLs
+jw attach              # infers repo from cwd
+jw attach electrons    # explicit repo name
 
 # Check what's running
 jw list
