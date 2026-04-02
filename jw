@@ -4,7 +4,7 @@
 #
 # Usage:
 #   jw start <path>              Start a Julia REPL tab for a package
-#   jw run <path> [filter]       Run tests (optionally filtered by filename substring)
+#   jw run <path> [filter]       Run tests (filter by file/name/tag, see help)
 #   jw output <path|name>        Capture test output from the tab
 #   jw kill <path|name>          Kill a tab
 #   jw format [path]             Format Julia code (defaults to current directory)
@@ -144,7 +144,24 @@ case "${1:-help}" in
         if [ -z "$filter" ]; then
             cmd='include("test/runtests.jl")'
         else
-            cmd="@run_package_tests filter=ti->startswith(abspath(ti.filename), pwd()) && contains(ti.filename, \"$filter\")"
+            # Build filter from comma-separated conditions with prefix syntax:
+            #   file:str   filename contains str
+            #   name:str   test item name contains str
+            #   tag:sym    test item has tag :sym
+            #   !tag:sym   test item does NOT have tag :sym
+            #   str        bare string = filename contains str (backward compat)
+            conditions="startswith(abspath(ti.filename), pwd())"
+            IFS=',' read -ra parts <<< "$filter"
+            for part in "${parts[@]}"; do
+                case "$part" in
+                    name:*)  val="${part#name:}";  conditions="$conditions && contains(ti.name, \"$val\")" ;;
+                    tag:*)   val="${part#tag:}";    conditions="$conditions && (Symbol(\"$val\") in ti.tags)" ;;
+                    \!tag:*) val="${part#\!tag:}";  conditions="$conditions && !(Symbol(\"$val\") in ti.tags)" ;;
+                    file:*)  val="${part#file:}";   conditions="$conditions && contains(ti.filename, \"$val\")" ;;
+                    *)       conditions="$conditions && contains(ti.filename, \"$part\")" ;;
+                esac
+            done
+            cmd="@run_package_tests filter=ti->($conditions)"
         fi
 
         tmux send-keys -t "$SESSION:$win" C-l
@@ -253,7 +270,7 @@ case "${1:-help}" in
         echo "jw - Julia Warm: fast test runner and formatter via tmux"
         echo ""
         echo "  jw start <path>             Start Julia REPL tab (with Revise + TestEnv)"
-        echo "  jw run <path> [filter]      Run tests (filter by filename substring)"
+        echo "  jw run <path> [filter]      Run tests (filter by file/name/tag)"
         echo "  jw output <path|name>       Show recent output"
         echo "  jw kill <path|name>         Kill a tab"
         echo "  jw format [path]            Format Julia code (default: current dir)"
@@ -261,5 +278,16 @@ case "${1:-help}" in
         echo "  jw list                     List active tabs"
         echo ""
         echo "  <path> can be a relative/absolute dir or a name under packages/"
+        echo ""
+        echo "  Filter syntax (combine with commas):"
+        echo "    str              filename contains str (default)"
+        echo "    file:str         filename contains str"
+        echo "    name:str         test item name contains str"
+        echo "    tag:sym          test item has tag :sym"
+        echo "    !tag:sym         test item does NOT have tag :sym"
+        echo ""
+        echo "  Examples: jw run pkg parser"
+        echo "           jw run pkg 'name:my_test,tag:fast'"
+        echo "           jw run pkg '!tag:slow'"
         ;;
 esac

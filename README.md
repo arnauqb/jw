@@ -26,7 +26,7 @@ This symlinks `jw` to `~/.local/bin/`. Pass a custom path: `./install.sh /usr/lo
 
 ```bash
 jw start <path>             # Start a warm Julia REPL tab for a package
-jw run <path> [filter]      # Run tests (filter by filename substring)
+jw run <path> [filter]      # Run tests (filter by file/name/tag)
 jw output <path|name>       # Show recent output from a tab
 jw kill <path|name>         # Kill a tab
 jw format [path]            # Format Julia code (default: current dir)
@@ -53,6 +53,29 @@ cat /path/to/jw/CLAUDE.md.example >> your-project/CLAUDE.md
 ```
 
 For other LLM tools, add equivalent instructions to their system prompt or project config.
+
+## Filtering
+
+The filter argument supports prefix syntax to match against different test item properties. Combine multiple filters with commas (all conditions are AND-ed):
+
+| Syntax     | Matches                              |
+|------------|--------------------------------------|
+| `str`      | filename contains `str` (default)    |
+| `file:str` | filename contains `str`              |
+| `name:str` | `@testitem` name contains `str`      |
+| `tag:sym`  | `@testitem` has tag `:sym`           |
+| `!tag:sym` | `@testitem` does NOT have tag `:sym` |
+
+```bash
+jw run pkg parser                      # filename contains "parser"
+jw run pkg name:my_test                # test item named "my_test"
+jw run pkg 'tag:fast'                  # only tests tagged :fast
+jw run pkg '!tag:slow'                 # exclude tests tagged :slow
+jw run pkg 'file:parser,name:csv'      # combine filters
+jw run pkg 'file:parser,!tag:slow'     # file filter + tag exclusion
+```
+
+Quote the filter when using `!` to prevent shell history expansion.
 
 ## Examples
 

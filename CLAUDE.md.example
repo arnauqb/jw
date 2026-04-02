@@ -3,7 +3,7 @@
 - Run tests via `jw` which keeps warm Julia sessions in tmux (one tab per package):
   - `jw start <path>` — start a Julia REPL tab with Revise + TestEnv
   - `jw run <path>` — run all tests
-  - `jw run <path> <filter>` — run filtered tests by filename substring
+  - `jw run <path> <filter>` — run filtered tests (file:str, name:str, tag:sym, !tag:sym, or bare filename substring; combine with commas)
   - `jw output <path|name>` — capture recent output
   - `jw kill <path|name>` — kill tab (e.g. when Revise can't recompile)
   - `jw format [path]` — format Julia code (warm JuliaFormatter session)
