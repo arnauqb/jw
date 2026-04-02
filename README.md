@@ -45,27 +45,39 @@ Before each test run, `jw` calls `Revise.revise()` and checks `Revise.errors()` 
 
 ## LLM agent setup
 
-### Plugin install (recommended)
+### Claude Code (plugin)
 
 1. Install the `jw` CLI:
 
        ./install.sh
 
-2. Register the Claude Code plugin:
+2. Register the plugin:
 
-       ./scripts/install-claude-plugin.sh
+       ./scripts/install-claude.sh
 
-After install, start a new Claude Code session. Claude will automatically use `jw` for Julia tests and formatting. A PreToolUse hook also blocks slow-path Julia commands (`Pkg.test()`, cold `JuliaFormatter`) and redirects to `jw`.
+Starts a new session with the julia-warm skill and a PreToolUse hook that blocks slow-path Julia commands.
 
-### Manual setup (alternative)
+### Codex (per-project skill)
 
-Copy `CLAUDE.md.example` into your project's `CLAUDE.md` (or append to an existing one):
+1. Install the `jw` CLI:
+
+       ./install.sh
+
+2. Install the skill into your Julia project:
+
+       ./scripts/install-codex.sh /path/to/your/project
+
+Codex auto-discovers the skill from `.agents/skills/julia-warm/`.
+
+### Manual setup (any tool)
+
+Copy `CLAUDE.md.example` into your project's instructions file:
 
 ```bash
 cat /path/to/jw/CLAUDE.md.example >> your-project/CLAUDE.md
 ```
 
-For other LLM tools, add equivalent instructions to their system prompt or project config.
+Works with any LLM tool that reads project-level instructions.
 
 ## Examples
 
