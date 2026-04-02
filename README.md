@@ -46,13 +46,39 @@ Before each test run, `jw` calls `Revise.revise()` and checks `Revise.errors()` 
 
 ## LLM agent setup
 
-Copy `CLAUDE.md.example` into your project's `CLAUDE.md` (or append to an existing one) so Claude Code knows to use `jw` instead of `Pkg.test()`:
+### Claude Code (plugin)
+
+1. Install the `jw` CLI:
+
+       ./install.sh
+
+2. Register the plugin:
+
+       ./scripts/install-claude.sh
+
+Starts a new session with the julia-warm skill and a PreToolUse hook that blocks slow-path Julia commands.
+
+### Codex (per-project skill)
+
+1. Install the `jw` CLI:
+
+       ./install.sh
+
+2. Install the skill into your Julia project:
+
+       ./scripts/install-codex.sh /path/to/your/project
+
+Codex auto-discovers the skill from `.agents/skills/julia-warm/`.
+
+### Manual setup (any tool)
+
+Copy `CLAUDE.md.example` into your project's instructions file:
 
 ```bash
 cat /path/to/jw/CLAUDE.md.example >> your-project/CLAUDE.md
 ```
 
-For other LLM tools, add equivalent instructions to their system prompt or project config.
+Works with any LLM tool that reads project-level instructions.
 
 ## Examples
 
